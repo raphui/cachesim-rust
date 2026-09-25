@@ -7,6 +7,7 @@ use crate::lackey_parser::LackeyParser;
 mod lackey_parser;
 mod pseudorandom_policy;
 mod types;
+mod cache;
 
 fn main() -> std::io::Result<()> {
     let args: Vec<String> = env::args().collect();
