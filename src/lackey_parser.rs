@@ -37,8 +37,6 @@ impl LackeyParser {
 
             let trimmed = line.trim_start();
 
-            println!("{}", line);
-
             let (type_, operation) = match trimmed.chars().next() {
                 Some('I') => (AccessType::INSTRUCTION, AccessOperation::READ),
                 Some('L') => (AccessType::DATA, AccessOperation::READ),
