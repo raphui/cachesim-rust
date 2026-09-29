@@ -3,6 +3,7 @@ pub enum AccessType {
     DATA,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AccessOperation {
     READ,
     WRITE,
