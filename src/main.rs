@@ -6,6 +6,7 @@ use clap::Parser;
 use crate::lackey_parser::LackeyParser;
 use crate::basic_parser::BasicParser;
 use crate::cache::Cache;
+use crate::types::AccessOperation;
 
 mod lackey_parser;
 mod basic_parser;
@@ -51,11 +52,19 @@ fn main() -> std::io::Result<()> {
 
     let associativity = u32::from_str_radix(associativity_str, 10).expect("failed to parser associativity");
 
-    let cache = Cache::new(line_size, nb_lines, associativity);
+    let mut cache = Cache::new(line_size, nb_lines, associativity);
 
     while let Some(access) = parser.next_access() {
-        //println!("{}", format!("{:x}", access.address));
+        if access.operation == AccessOperation::WRITE {
+            cache.write(access);
+        } else if access.operation == AccessOperation::READ {
+            cache.read(access);
+        }
     }
+
+    println!("Hits {}", cache.hits);
+    println!("Misses {}", cache.misses);
+    println!("Evictions {}", cache.evictions);
 
     Ok(())
 }

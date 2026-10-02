@@ -30,13 +30,13 @@ pub struct Cache {
     cache_desc: CacheDesc,
     replace_policy: PseudorandomPolicy,
     cache: Vec<CacheLine>,
-    misses: u32,
+    pub misses: u32,
     write_misses: u32,
     read_misses: u32,
-    hits: u32,
+    pub hits: u32,
     write_hits: u32,
     read_hits: u32,
-    evictions: u32,
+    pub evictions: u32,
 }
 
 impl Cache {
