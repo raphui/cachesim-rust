@@ -1,3 +1,4 @@
+use crate::parser::AccessParser;
 use crate::types::Access;
 use crate::types::AccessType;
 use crate::types::AccessOperation;
@@ -29,8 +30,10 @@ impl LackeyParser {
 
         return Some(String::from(line));
     }
+}
 
-    pub fn next_access(&mut self) -> Option<Access> {
+impl AccessParser for LackeyParser {
+    fn next_access(&mut self) -> Option<Access> {
 
         while let Some(line) = self.content.get(self.cursor) {
             self.cursor += 1;
