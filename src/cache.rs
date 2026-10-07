@@ -1,5 +1,6 @@
 use crate::types::Access;
 use crate::types::AccessOperation;
+use crate::types::CacheType;
 use crate::pseudorandom_policy::PseudorandomPolicy;
 
 const BYTES_PER_WORD: u32 = 1;
@@ -27,6 +28,9 @@ struct CacheDesc {
 }
 
 pub struct Cache {
+    pub name: String,
+    pub type_: CacheType,
+    pub level: u32,
     cache_desc: CacheDesc,
     replace_policy: PseudorandomPolicy,
     cache: Vec<CacheLine>,
@@ -37,10 +41,11 @@ pub struct Cache {
     write_hits: u32,
     read_hits: u32,
     pub evictions: u32,
+    pub next_level: Option<usize>,
 }
 
 impl Cache {
-    pub fn new(line_size: u32, nb_lines: u32, associativity: u32) -> Self {
+    pub fn new(name: String, type_: CacheType, level: u32, line_size: u32, nb_lines: u32, associativity: u32) -> Self {
         let nb_sets = nb_lines / associativity;
         let offset_bit = (line_size / BYTES_PER_WORD).ilog2();
         let index_bit = nb_sets.ilog2();
@@ -55,6 +60,9 @@ impl Cache {
         let cache = vec![CacheLine::default(); nb_lines as usize];
 
         Cache {
+            name: name,
+            type_: type_,
+            level: level,
             cache_desc: CacheDesc {
                 line_size: line_size,
                 nb_lines: nb_lines,
@@ -77,6 +85,7 @@ impl Cache {
             write_hits: 0,
             read_hits: 0,
             evictions: 0,
+            next_level: None,
         }
     }
 
