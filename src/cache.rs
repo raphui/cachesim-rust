@@ -136,7 +136,8 @@ impl Cache {
         set.iter().all(|line| line.valid)
     }
 
-    fn perform(&mut self, access: Access) {
+    pub fn perform(&mut self, access: Access) -> bool {
+        let mut hit = false;
         let line = self.find_line(&access);
 
         match line {
@@ -174,11 +175,15 @@ impl Cache {
                 }
 
                 self.hits += 1;
+
+                hit = true;
             }
 
         }
 
         self.replace_policy.post_op(self.cache_desc.associativity, &access);
+
+        return hit;
     }
 
     pub fn read(&mut self, access: Access) {
