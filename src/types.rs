@@ -1,3 +1,4 @@
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AccessType {
     INSTRUCTION,
     DATA,
@@ -10,6 +11,7 @@ pub enum AccessOperation {
     DATA,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Access {
     pub address: u32,
     pub type_: AccessType, 
