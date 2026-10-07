@@ -15,3 +15,10 @@ pub struct Access {
     pub type_: AccessType, 
     pub operation: AccessOperation, 
 }
+
+#[derive(PartialEq, Eq, Debug)]
+pub enum CacheType {
+    INSTRUCTION,
+    DATA,
+    UNIFIED,
+}
