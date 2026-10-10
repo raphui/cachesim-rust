@@ -15,6 +15,8 @@ use crate::types::Access;
 use crate::types::AccessOperation;
 use crate::types::AccessType;
 use crate::types::CacheType;
+use crate::types::InclusionPolicy;
+use crate::types::Status;
 
 mod lackey_parser;
 mod basic_parser;
@@ -40,21 +42,34 @@ fn make_parser(path: &str, lines: Vec<String>) -> Result<Box<dyn AccessParser>, 
     }
 }
 
-fn parse_cache(cache: FdtNode) -> Cache {
-    let level = cache.property("cache-level").and_then(|p| p.as_usize()).expect("cache-level") as u32;
-    let line_size = cache.property("line-size").and_then(|p| p.as_usize()).expect("line-size") as u32;
-    let nb_lines = cache.property("nb-lines").and_then(|p| p.as_usize()).expect("nb-lines") as u32;
-    let associativity = cache.property("associativity").and_then(|p| p.as_usize()).expect("associativity") as u32;
-    //let policy = cache.property("policy").and_then(|p| p.as_str()).expect("policy");
-    let type_ = if cache.name.contains("_i") {
+fn parse_cache(node: FdtNode) -> Cache {
+    let level = node.property("cache-level").and_then(|p| p.as_usize()).expect("cache-level") as u32;
+    let line_size = node.property("line-size").and_then(|p| p.as_usize()).expect("line-size") as u32;
+    let nb_lines = node.property("nb-lines").and_then(|p| p.as_usize()).expect("nb-lines") as u32;
+    let associativity = node.property("associativity").and_then(|p| p.as_usize()).expect("associativity") as u32;
+    //let policy = node.property("policy").and_then(|p| p.as_str()).expect("policy");
+    let type_ = if node.name.contains("_i") {
         CacheType::INSTRUCTION
-    } else if cache.name.contains("_d") {
+    } else if node.name.contains("_d") {
         CacheType::DATA
     } else {
         CacheType::UNIFIED
     };
 
-    return Cache::new(String::from(cache.name), type_, level, line_size, nb_lines, associativity)
+    let mut cache = Cache::new(String::from(node.name), type_, level, line_size, nb_lines, associativity);
+
+    if level > 1 {
+        let inclusion_policy = if node.property("inclusion-policy")
+            .and_then(|p| p.as_str()).expect("inclusion-policy").contains("inclusive") {
+            InclusionPolicy::INCLUSIVE
+        } else {
+            InclusionPolicy::EXCLUSIVE
+        };
+
+        cache.inclusion_policy = Some(inclusion_policy);
+    }
+
+    return cache;
 }
 
 fn add_cache(node: FdtNode, fdt: &Fdt, caches: &mut Vec<Cache>) -> usize {
@@ -77,15 +92,53 @@ fn add_cache(node: FdtNode, fdt: &Fdt, caches: &mut Vec<Cache>) -> usize {
     return caches.len() - 1;
 }
 
-fn run(caches: &mut Vec<Cache>, idx: usize, access: Access) {
-    let mut current = Some(idx);
+fn handle_inclusion_policy(caches: &mut Vec<Cache>, l1: usize, l2: usize, access: Access) {
+    if let Some(inclusion_policy) =  caches[l2].inclusion_policy {
+        match inclusion_policy {
+            InclusionPolicy::INCLUSIVE => {
+                match caches[l2].perform(access) {
+                    Status::HIT => {
+                    },
+                    Status::MISS {evicted: None} => {
+                        caches[l1].place(&access);
+                    },
+                    Status::MISS {evicted: Some(victim)} => {
+                        caches[l1].place(&access);
+                        caches[l1].invalidate(&victim);
+                    }
+                }
+            },
+            InclusionPolicy::EXCLUSIVE => {
+                match caches[l2].perform(access) {
+                    Status::HIT => {
+                        caches[l2].invalidate(&access);
 
-    while let Some(i) = current {
-            if caches[i].perform(access) {
-                break;
+                        if let Some(evicted) = caches[l1].place(&access) {
+                            caches[l2].place(&evicted);
+                        }
+                    },
+                    Status::MISS {evicted: None} => {
+                        caches[l1].place(&access);
+                    },
+                    Status::MISS {evicted: Some(victim)} => {
+                        caches[l1].place(&access);
+
+                        caches[l2].place(&victim);
+                       
+                    }
+                }
+            },
+        };
+    }
+}
+
+fn run(caches: &mut Vec<Cache>, l1: usize, access: Access) {
+    if let Status::MISS {evicted: _} = caches[l1].perform(access) {
+        if let Some(l2) = caches[l1].next_level {
+            if access.operation == AccessOperation::READ {
+                handle_inclusion_policy(caches, l1, l2, access);
             }
-
-            current = caches[i].next_level;
+        }
     }
 }
 
@@ -123,9 +176,13 @@ fn main() -> std::io::Result<()> {
         run(&mut caches, cache_idx, access);
     }
 
-    //println!("Hits {}", cache.hits);
-    //println!("Misses {}", cache.misses);
-    //println!("Evictions {}", cache.evictions);
+    for cache in caches {
+        println!("---- L{} STATS ----", cache.level);
+        println!("Hits {}", cache.hits);
+        println!("Misses {}", cache.misses);
+        println!("Evictions {}", cache.evictions);
+    }
+
 
     Ok(())
 }

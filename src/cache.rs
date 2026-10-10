@@ -1,6 +1,8 @@
 use crate::types::Access;
 use crate::types::AccessOperation;
 use crate::types::CacheType;
+use crate::types::InclusionPolicy;
+use crate::types::Status;
 use crate::pseudorandom_policy::PseudorandomPolicy;
 
 const BYTES_PER_WORD: u32 = 1;
@@ -42,6 +44,7 @@ pub struct Cache {
     read_hits: u32,
     pub evictions: u32,
     pub next_level: Option<usize>,
+    pub inclusion_policy: Option<InclusionPolicy>,
 }
 
 impl Cache {
@@ -86,6 +89,7 @@ impl Cache {
             read_hits: 0,
             evictions: 0,
             next_level: None,
+            inclusion_policy: None,
         }
     }
 
@@ -104,6 +108,13 @@ impl Cache {
 
     fn start_of_set(&self, access: &Access) -> usize {
         self.get_index(access) as usize * self.cache_desc.associativity as usize
+    }
+
+    fn line_address(&self, idx: usize) -> u32 {
+        let d = &self.cache_desc;
+        let set = (idx / d.associativity as usize) as u32;
+
+        (self.cache[idx].tag << (d.offset_bit + d.index_bit)) | (set << d.offset_bit)
     }
 
     fn get_set(&self, access: &Access) -> &[CacheLine] {
@@ -136,20 +147,27 @@ impl Cache {
         set.iter().all(|line| line.valid)
     }
 
-    pub fn perform(&mut self, access: Access) -> bool {
-        let mut hit = false;
+    pub fn invalidate(&mut self, access: &Access) {
+        if let Some(line) = self.find_line(access) {
+            self.cache[line].block = 0;
+            self.cache[line].valid = false;
+        }
+    }
+
+    pub fn place(&mut self, access: &Access) -> Option<Access> {
+        let idx: usize;
+        let mut evicted = None;
+        let tag = self.get_tag(&access);
         let line = self.find_line(&access);
 
         match line {
             None => {
-                let idx: usize;
-                let tag = self.get_tag(&access);
 
                 if self.is_set_full(&access) {
                     idx = self.start_of_set(&access) +
                         self.replace_policy.find_evicted(self.cache_desc.associativity) as usize;
 
-                    self.evictions += 1;
+                    evicted = Some(Access {address: self.line_address(idx), ..*access})
                 } else {
                     /* unwrap should be safe because
                      * we checked that the set is not full just before
@@ -157,40 +175,48 @@ impl Cache {
                     idx = self.find_free_line(&access).unwrap();
                 }
 
-                self.replace_policy.execute(&mut self.cache[idx], tag);
-
-                if access.operation == AccessOperation::READ {
-                    self.read_misses += 1;
-                } else if access.operation == AccessOperation::WRITE {
-                    self.write_misses += 1;
-                }
-
-                self.misses += 1;
             },
-            Some(_) => {
-                if access.operation == AccessOperation::READ {
-                    self.read_hits += 1;
-                } else if access.operation == AccessOperation::WRITE {
-                    self.write_hits += 1;
-                }
+            Some(line) => {
+                idx = line;
+            }
+        }
 
-                self.hits += 1;
+        self.replace_policy.execute(&mut self.cache[idx], tag);
 
-                hit = true;
+        return evicted;
+    }
+
+    pub fn perform(&mut self, access: Access) -> Status {
+        let status = if self.find_line(&access).is_some() {
+            match access.operation {
+                AccessOperation::READ => self.read_hits += 1,
+                AccessOperation::WRITE => self.write_hits += 1,
+                _ => {}
             }
 
-        }
+            self.hits += 1;
+
+            Status::HIT
+        } else {
+            let evicted = self.place(&access);
+
+            if evicted.is_some() {
+                self.evictions += 1;
+            }
+
+            match access.operation {
+                AccessOperation::READ => self.read_misses += 1,
+                AccessOperation::WRITE => self.write_misses += 1,
+                _ => {}
+            }
+
+            self.misses += 1;
+
+            Status::MISS {evicted}
+        };
 
         self.replace_policy.post_op(self.cache_desc.associativity, &access);
 
-        return hit;
-    }
-
-    pub fn read(&mut self, access: Access) {
-        self.perform(access);
-    }
-
-    pub fn write(&mut self, access: Access) {
-        self.perform(access);
+        status
     }
 }

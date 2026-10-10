@@ -24,3 +24,15 @@ pub enum CacheType {
     DATA,
     UNIFIED,
 }
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum InclusionPolicy {
+    INCLUSIVE,
+    EXCLUSIVE,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Status {
+    HIT,
+    MISS {evicted: Option<Access>},
+}
